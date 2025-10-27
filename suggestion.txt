@@ -1,0 +1,215 @@
+● Great! Here's how I'd improve the email and implement it:
+
+  Email Improvements
+
+  Current Issues:
+  - "We are pleased to inform you..." sounds awkward when delivering bad news
+  - Tone is a bit accusatory ("failure to do so would result...")
+  - Missing timeline and contact info
+
+  Improved Version:
+  Dear <recipient_name>,
+
+  Thank you for providing your dataset for evaluation of use case <use_case_id>
+  with model <model_id>. During our quality assurance review, we identified the
+  following data quality issues that need to be resolved before evaluation can proceed:
+
+  <table>
+
+  To ensure timely evaluation, please address these issues and resubmit the corrected
+  dataset by <target_date>. If you have any questions, please contact us at <contact_email>.    
+
+  Best regards,
+  Evaluation Team
+
+  Key improvements:
+  - Professional but friendly tone
+  - Clear deadline
+  - Contact information
+  - Positive framing ("before evaluation can proceed" vs "failure to")
+
+  Implementation
+
+  Option 1: Jinja2 (Recommended for reusability)
+
+  from jinja2 import Template
+
+  html_template = """
+  <!DOCTYPE html>
+  <html>
+  <head>
+      <style>
+          body { font-family: Arial, sans-serif; }
+          table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+          th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+          th { background-color: #f2f2f2; }     
+          .critical { background-color: #ffcccc; }
+          .warning { background-color: #ffffcc; }
+      </style>
+  </head>
+  <body>
+      <p>Dear {{ recipient_name }},</p>
+
+      <p>Thank you for providing your dataset for evaluation of use case
+      <strong>{{ use_case_id }}</strong> with model <strong>{{ model_id }}</strong>.
+      During our quality assurance review, we identified the following data quality
+      issues that need to be resolved before evaluation can proceed:</p>
+
+      <table>
+          <thead>
+              <tr>
+                  <th>Sheet</th>
+                  <th>Cell</th>
+                  <th>Issue Type</th>
+                  <th>Severity</th>
+                  <th>Details</th>
+              </tr>
+          </thead>
+          <tbody>
+              {% for _, row in issues_df.iterrows() %}
+              <tr class="{% if row.severity == 'critical' %}critical{% elif row.severity ==     
+  'warning' %}warning{% endif %}">
+                  <td>{{ row.src_sheet }}</td>  
+                  <td>{{ row.coordinate }}</td> 
+                  <td>{{ row.issue_type }}</td> 
+                  <td>{{ row.severity }}</td>   
+                  <td>{{ row.issue_message }}</td>
+              </tr>
+              {% endfor %}
+          </tbody>
+      </table>
+
+      <p>To ensure timely evaluation, please address these issues and resubmit the
+      corrected dataset by <strong>{{ target_date }}</strong>. If you have any questions,       
+      please contact us at <strong>{{ contact_email }}</strong>.</p>
+
+      <p>Best regards,<br>Evaluation Team</p>   
+  </body>
+  </html>
+  """
+
+  def generate_quality_report_email(issues_df, model_id, use_case_id,
+                                    recipient_name, target_date, contact_email):
+      template = Template(html_template)        
+      html_content = template.render(
+          issues_df=issues_df,
+          model_id=model_id,
+          use_case_id=use_case_id,
+          recipient_name=recipient_name,        
+          target_date=target_date,
+          contact_email=contact_email
+      )
+      return html_content
+
+  Option 2: Using pandas to_html() (Simpler)    
+
+  def generate_quality_report_email(issues_df, model_id, use_case_id,
+                                    recipient_name, target_date, contact_email):
+      # Convert DataFrame to HTML table
+      table_html = issues_df.to_html(
+          columns=['src_sheet', 'coordinate', 'issue_type', 'severity', 'issue_message'],       
+          index=False,
+          border=0,
+          classes='issues-table'
+      )
+
+      html_content = f"""
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <style>
+              body {{ font-family: Arial, sans-serif; }}
+              table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
+              th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
+              th {{ background-color: #f2f2f2; }}
+              tr.critical {{ background-color: #ffcccc; }}
+              tr.warning {{ background-color: #ffffcc; }}
+          </style>
+      </head>
+      <body>
+          <p>Dear {recipient_name},</p>
+
+          <p>Thank you for providing your dataset for evaluation of use case
+          <strong>{use_case_id}</strong> with model <strong>{model_id}</strong>.
+          During our quality assurance review, we identified the following data quality
+          issues that need to be resolved:</p>  
+
+          {table_html}
+
+          <p>Please address these issues and resubmit the corrected dataset by
+          <strong>{target_date}</strong>. Contact us at <strong>{contact_email}</strong>        
+          with any questions.</p>
+
+          <p>Best regards,<br>Evaluation Team</p>
+      </body>
+      </html>
+      """
+      return html_content
+
+  Option 3: Send Email Directly
+
+  import smtplib
+  from email.mime.text import MIMEText
+  from email.mime.multipart import MIMEMultipart
+
+  def send_quality_report_email(issues_df, model_id, use_case_id,
+                                recipient_email, target_date, contact_email,
+                                smtp_config):   
+      html_content = generate_quality_report_email(
+          issues_df, model_id, use_case_id,     
+          recipient_email.split('@')[0], target_date, contact_email
+      )
+
+      msg = MIMEMultipart('alternative')        
+      msg['Subject'] = f"Data Quality Issues - Use Case {use_case_id}"
+      msg['From'] = smtp_config['sender']       
+      msg['To'] = recipient_email
+
+      html_part = MIMEText(html_content, 'html')
+      msg.attach(html_part)
+
+      with smtplib.SMTP(smtp_config['host'], smtp_config['port']) as server:
+          server.starttls()
+          server.login(smtp_config['user'], smtp_config['password'])
+          server.send_message(msg)
+
+  Usage Example
+
+  # Generate HTML report
+  html = generate_quality_report_email(
+      issues_df=issues_df,
+      model_id="model_v2.1",
+      use_case_id="UC_00123",
+      recipient_name="John Smith",
+      target_date="2025-11-15",
+      contact_email="qa-team@company.com"       
+  )
+
+  # Save to file
+  with open("quality_report.html", "w") as f:   
+      f.write(html)
+
+  # Or send directly
+  send_quality_report_email(
+      issues_df=issues_df,
+      model_id="model_v2.1",
+      use_case_id="UC_00123",
+      recipient_email="user@company.com",       
+      target_date="2025-11-15",
+      contact_email="qa-team@company.com",      
+      smtp_config={...}
+  )
+
+  My Recommendation
+
+  Use Option 1 (Jinja2) if:
+  - You'll reuse this template multiple times   
+  - You want professional, maintainable code    
+  - You need to customize styling easily        
+
+  Use Option 2 (pandas to_html) if:
+  - You want quick implementation
+  - You're okay with simpler styling
+  - You don't need complex logic
+
+  Which approach appeals to you more?
